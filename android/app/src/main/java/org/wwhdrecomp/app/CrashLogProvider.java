@@ -17,9 +17,10 @@ import java.io.FileNotFoundException;
  * intent grants the receiving app access to the URIs it carries.
  */
 public final class CrashLogProvider extends ContentProvider {
-    static final String AUTHORITY = "org.wwhdrecomp.app.crashlogs";
-
-    static Uri uri(File log) { return new Uri.Builder().scheme("content").authority(AUTHORITY).appendPath(log.getName()).build(); }
+    static Uri uri(android.content.Context context, File log) {
+        return new Uri.Builder().scheme("content").authority(context.getPackageName() + ".crashlogs")
+                .appendPath(log.getName()).build();
+    }
 
     private File file(Uri u) throws FileNotFoundException {
         String name = u.getLastPathSegment();
