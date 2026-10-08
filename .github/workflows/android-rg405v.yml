@@ -25,12 +25,11 @@ jobs:
           java-version: '17'
       - name: Test game folder import
         run: bash tools/android/test-game-import.sh
-      - uses: android-actions/setup-android@v3
       - name: Install build tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y cmake ninja-build
-          sdkmanager 'platforms;android-36' 'ndk;27.2.12479018' 'cmake;3.22.1'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'ndk;27.2.12479018' 'cmake;3.22.1'
       - name: Restore Android LLVM
         id: llvm
         uses: actions/cache@v4
@@ -39,9 +38,7 @@ jobs:
           key: android-llvm-20.1.8-ndk-27.2.12479018-v1
       - name: Build Android LLVM
         if: steps.llvm.outputs.cache-hit != 'true'
-        env:
-          ANDROID_NDK: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
-        run: bash tools/android/build-llvm.sh
+        run: ANDROID_NDK="$ANDROID_HOME/ndk/27.2.12479018" bash tools/android/build-llvm.sh
       - name: Build APK without game data
         working-directory: android
         run: |
