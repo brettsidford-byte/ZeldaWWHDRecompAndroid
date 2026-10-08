@@ -1,5 +1,33 @@
 # TLoZ:TWW HD Recompiled — Android
 
+## RG405V fork (0.6.1)
+
+This fork adds **Import extracted game folder…** to first-run setup. Select the parent folder
+containing your complete, decrypted Wii U Wind Waker HD `code`, `content` and `meta` directories.
+The executable must be `code/cking.rpx`; `meta` is copied when present. No image conversion or
+separate keys are needed. The app copies the game with progress and cancellation, validates the
+supported executable, then prepares its code on the device. An interrupted copy can be retried
+by selecting the folder again. Saves are separate from the imported game data.
+
+The initial graphics settings target the RG405V's **640×480** display: **0.5× rendering**, **Screen
+shape** and **TV only**. On a 4:3 screen this renders the main 3D view at 640×480, with correct
+proportions and more view above and below the original 16:9 picture. Graphics settings remain
+adjustable. These defaults are applied once on the first launch of this fork. Other render
+targets, including shadow maps and the final scan buffer, may have different sizes. Resolution
+alone does not guarantee a particular frame rate on the T618/Mali-G52.
+
+The fork uses application ID `org.wwhdrecomp.app.rg405v`, so it installs alongside the upstream
+app. To bring across an existing save, export it from the upstream app and import it here.
+
+[Build RG405V APK](https://github.com/brettsidford-byte/ZeldaWWHDRecompAndroid/actions/workflows/android-rg405v.yml) runs the synthetic import tests and
+builds an ARM64 APK without game data. Download its APK artifact after the workflow succeeds.
+The first build compiles Android LLVM and can take a long time; later builds reuse it from cache.
+The personal build uses the runner's debug signing key; for a stable update signing identity,
+build locally with the release keystore described below. `bash tools/android/test-game-import.sh`
+runs the import tests with JDK 17, without an Android device or game files.
+
+The upstream instructions and features follow.
+
 An Android port of the [ZeldaWWHDRecomp](https://github.com/ZeldaWWHDRecomp/ZeldaWWHDRecomp) project:
 The Legend of Zelda: The Wind Waker HD (Wii U, USA, European and Japanese versions) as a native app for 64-bit ARM Android
 devices. The game's PowerPC code is recompiled to native ARM code, the Wii U system libraries the

@@ -7,6 +7,12 @@
     <string name="setup_welcome">Welcome!\n\nThis app contains no game files. It plays your own copy of The Legend of Zelda: The Wind Waker HD for Wii U (USA, European or Japanese version).\n\nPut these three files in one folder on this device, then choose that folder:\n•  your disc image (.wux or .wud)\n•  its disc key (the image\'s name with .key)\n•  the console\'s common key (common.key)\n\nOr put a Cemu archive of your game (.wua) in a folder; it needs no keys.\n\nThe app then extracts the game files (about 1.7 GB) and prepares the game code for this device. That happens once and takes a while, depending on the device\'s processor.</string>
     <string name="setup_problem">The game files found don\'t work: %1$s</string>
     <string name="setup_extract">Extract from your disc image or .wua…</string>
+    <string name="setup_game_folder">Import extracted game folder…</string>
+    <string name="import_game_choose">Select the parent folder containing code, content and meta, rather than one of those subfolders. Use the complete, decrypted Wind Waker HD game. No disc image or key files are needed.</string>
+    <string name="import_game_running">Copying the game files…\n\nYou can leave the app while it copies. The game code will be prepared automatically afterwards. If the import is interrupted, select the folder again to retry.</string>
+    <string name="work_importing">Copying the game files</string>
+    <string name="import_game_failed">Game import failed: %1$s</string>
+    <string name="import_game_cancelled">Game import was cancelled. Select the game folder again to retry.</string>
     <string name="extract_missing">Choose the folder that holds your disc image, its disc key and the console\'s common key:\n\n%1$s the image (.wux or .wud)\n%2$s its disc key (the image\'s name with .key)\n%3$s common.key\n\nOr a folder that holds a Cemu archive of your game (.wua).</string>
     <string name="extract_bad_key">A key file must hold 16 bytes or 32 hex digits.</string>
     <string name="extract_running">Extracting the game from your disc image…</string>
@@ -153,7 +159,7 @@
     <string name="opt_framegen">Frame generation</string>
     <string name="opt_aspect">Aspect ratio</string>
     <string name="opt_render_aspect">Widescreen</string>
-    <string name="opt_render_aspect_hint">Screen shape: the game renders at your screen\'s aspect ratio and shows more to the sides; the HUD keeps its proportions at the screen edges</string>
+    <string name="opt_render_aspect_hint">Screen shape: the game fills your screen without stretching. Wider screens show more to the sides; 4:3 screens show more above and below. The HUD keeps its proportions.</string>
     <string-array name="render_aspect_modes">
         <item>Original 16:9</item>
         <item>Screen shape</item>

@@ -1,0 +1,57 @@
+name: Build RG405V APK
+
+on:
+  push:
+    branches: [android]
+  pull_request:
+    branches: [android]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      WWHD_BUILD_JOBS: 2
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Test game folder import
+        run: bash tools/android/test-game-import.sh
+      - uses: android-actions/setup-android@v3
+      - name: Install build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build
+          sdkmanager 'platforms;android-36' 'ndk;27.2.12479018' 'cmake;3.22.1'
+      - name: Restore Android LLVM
+        id: llvm
+        uses: actions/cache@v4
+        with:
+          path: build/llvm/install
+          key: android-llvm-20.1.8-ndk-27.2.12479018-v1
+      - name: Build Android LLVM
+        if: steps.llvm.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
+        run: bash tools/android/build-llvm.sh
+      - name: Build APK without game data
+        working-directory: android
+        run: |
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          bash gradlew assembleRelease -PwwhdDeviceRecomp --no-daemon --max-workers=2
+          cp app/build/outputs/apk/release/app-release.apk ../Wind-Waker-HD-RG405V-0.6.1.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wind-Waker-HD-RG405V-0.6.1-arm64
+          path: Wind-Waker-HD-RG405V-0.6.1.apk
+          if-no-files-found: error
+          retention-days: 30

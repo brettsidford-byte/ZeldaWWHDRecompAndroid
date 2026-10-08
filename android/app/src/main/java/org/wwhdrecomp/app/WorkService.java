@@ -29,7 +29,7 @@ public final class WorkService extends Service {
 
     /** The one long job that may run (extraction or compile), shared by every MainActivity instance. */
     static final class Work {
-        static final int EXTRACT = 1, COMPILE = 2;
+        static final int EXTRACT = 1, COMPILE = 2, IMPORT = 3;
         private static int running;                  // EXTRACT, COMPILE or 0
         private static long startedAt;               // SystemClock.elapsedRealtime()
         private static volatile boolean cancelled;
@@ -42,6 +42,10 @@ public final class WorkService extends Service {
         static long elapsedSeconds() { return (SystemClock.elapsedRealtime() - startedAt) / 1000; }
 
         static void markCancelled() { cancelled = true; }
+        static boolean isCancelled() { return cancelled; }
+        static long[] progress(int kind) {
+            return kind == IMPORT ? GameFolderImport.progress() : kind == EXTRACT ? Native.extractProgress() : Native.compileProgress();
+        }
 
         /** Starts `job` (returns null or an error) unless a job is running; the result goes to MainActivity.workFinished. */
         static synchronized boolean start(Context ctx, int kind, Callable<String> job) {
@@ -74,7 +78,7 @@ public final class WorkService extends Service {
                     MainActivity a = MainActivity.instance;
                     if (a != null && !a.isDestroyed()) takeFinished(a);
                 });
-            }, kind == EXTRACT ? "extract" : "compile").start();
+            }, kind == IMPORT ? "import-game" : kind == EXTRACT ? "extract" : "compile").start();
             return true;
         }
 
@@ -116,8 +120,9 @@ public final class WorkService extends Service {
     }
 
     private Notification build() {
-        boolean extract = Work.running() == Work.EXTRACT;
-        long[] p = extract ? Native.extractProgress() : Native.compileProgress();
+        int kind = Work.running();
+        boolean extract = kind != Work.COMPILE;
+        long[] p = Work.progress(kind);
         long s = Work.elapsedSeconds();
         String text = p[1] <= 0 ? "" : extract
                 ? getString(R.string.extract_detail_short, p[0] / 1048576, p[1] / 1048576)
@@ -126,7 +131,7 @@ public final class WorkService extends Service {
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         return new Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setContentTitle(getString(extract ? R.string.work_extracting : R.string.work_compiling))
+                .setContentTitle(getString(kind == Work.IMPORT ? R.string.work_importing : extract ? R.string.work_extracting : R.string.work_compiling))
                 .setContentText(text)
                 .setProgress(1000, p[1] > 0 ? (int) (p[0] * 1000 / p[1]) : 0, p[1] <= 0)
                 .setOngoing(true)

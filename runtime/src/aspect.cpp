@@ -128,6 +128,8 @@ void set_window_aspect(float a) {
     if (!(a > 0.1f && a < 20.0f)) return;
     // window resizes are continuous; steps of 0.5% keep render targets from being remade every frame
     float q = std::round(a * 200.0f) / 200.0f;
+    // Keep 4:3 exact: quantisation otherwise makes the 0.5x target 640x479 rather than 640x480.
+    if (std::fabs(a - 4.0f / 3.0f) < 0.001f) q = 4.0f / 3.0f;
     if (std::fabs(q - kBase) < 0.006f) q = kBase;  // a 16:9 window (rounded pixel sizes) is 16:9
     g_window.store(q, std::memory_order_relaxed);
 }

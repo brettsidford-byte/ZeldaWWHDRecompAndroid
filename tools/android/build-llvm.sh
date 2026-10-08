@@ -3,6 +3,7 @@
 # generation and the ORC JIT linker, as static libraries for Android arm64, in build/llvm/install.
 # Takes about 20 minutes on a 12-core PC; needs git, CMake, Ninja and the NDK.
 set -e
+build_jobs=${WWHD_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN)}
 cd "$(dirname "$0")/../.."
 NDK=${ANDROID_NDK:-$HOME/Android/Sdk/ndk/27.2.12479018}
 mkdir -p build/llvm
@@ -13,7 +14,7 @@ fi
 # host tools (tablegen) of the same version
 cmake -S src/llvm -B host -G Ninja -DCMAKE_BUILD_TYPE=Release -DLLVM_TARGETS_TO_BUILD=AArch64 \
   -DLLVM_INCLUDE_TESTS=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_ZLIB=OFF
-ninja -C host llvm-tblgen llvm-config
+ninja -j "$build_jobs" -C host llvm-tblgen llvm-config
 # Android arm64 libraries (static), no tools
 cmake -S src/llvm -B android -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_TOOLCHAIN_FILE=$NDK/build/cmake/android.toolchain.cmake -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-30 \
@@ -22,6 +23,6 @@ cmake -S src/llvm -B android -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DLLVM_INCLUDE_BENCHMARKS=OFF -DLLVM_INCLUDE_DOCS=OFF -DLLVM_ENABLE_ZSTD=OFF -DLLVM_ENABLE_ZLIB=OFF -DLLVM_ENABLE_LIBXML2=OFF \
   -DLLVM_ENABLE_TERMINFO=OFF -DLLVM_ENABLE_LIBEDIT=OFF -DLLVM_ENABLE_RTTI=ON -DLLVM_ENABLE_EH=OFF \
   -DCMAKE_INSTALL_PREFIX=$PWD/install
-ninja -C android install
+ninja -j "$build_jobs" -C android install
 cp src/llvm/LICENSE.TXT install/LICENSE.TXT  # shown in the app (Apache-2.0 with LLVM exception)
 du -sh install

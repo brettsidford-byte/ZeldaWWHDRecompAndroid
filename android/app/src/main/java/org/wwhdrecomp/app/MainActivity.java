@@ -70,6 +70,13 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         super.onCreate(state);
         instance = this;
         prefs = getSharedPreferences("settings", MODE_PRIVATE);
+        // This fork targets the RG405V: 0.5x plus a 4:3 screen gives a 640x480 3D view.
+        // Initialise once; subsequent launches preserve changes made in the options menu.
+        if (!prefs.getBoolean("rg405v_defaults", false)) {
+            prefs.edit().putString("res_scale", "0.5").putInt("render_aspect", 1)
+                    .putInt("tv_aspect", 0).putInt("layout", LAYOUT_TV)
+                    .putBoolean("rg405v_defaults", true).commit();
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         if (!libraryLoaded) {
@@ -409,6 +416,13 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         extract.setText(R.string.setup_extract);
         extract.setOnClickListener(v -> pickFolder(PICK_DISC));
         box.addView(extract, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        Button folder = new Button(this);
+        folder.setText(R.string.setup_game_folder);
+        folder.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(R.string.setup_game_folder)
+                .setMessage(R.string.import_game_choose)
+                .setPositiveButton(R.string.backup_choose_folder, (dialog, which) -> pickFolder(PICK_GAME_FOLDER))
+                .setNegativeButton(android.R.string.cancel, null).show());
+        box.addView(folder, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         Button retry = new Button(this);
         retry.setText(R.string.setup_retry);
         retry.setOnClickListener(v -> checkAndStart());
@@ -970,6 +984,44 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         Native.setOption(mod + "_mode", moveMode(mod));
     }
 
+    // ------------------------------------------------------------------ decrypted game folder
+    private void startGameFolderImport(android.net.Uri tree) {
+        // Use the application resolver: the worker can outlive this activity.
+        android.content.ContentResolver resolver = getApplicationContext().getContentResolver();
+        GameFolderImport.Source source = new GameFolderImport.Source() {
+            @Override public List<GameFolderImport.Node> children(String id) throws IOException {
+                android.net.Uri uri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, id);
+                String[] projection = {android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                        android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
+                        android.provider.DocumentsContract.Document.COLUMN_SIZE};
+                List<GameFolderImport.Node> result = new ArrayList<>();
+                try (android.database.Cursor c = resolver.query(uri, projection, null, null, null)) {
+                    if (c == null) throw new IOException("Cannot read the selected game folder.");
+                    while (c.moveToNext()) result.add(new GameFolderImport.Node(c.getString(0), c.getString(1),
+                            android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(c.getString(2)),
+                            c.isNull(3) ? -1 : c.getLong(3)));
+                }
+                return result;
+            }
+            @Override public InputStream open(String id) throws IOException {
+                return resolver.openInputStream(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, id));
+            }
+        };
+        File game = new File(gameDir());
+        String root = android.provider.DocumentsContract.getTreeDocumentId(tree);
+        askNotifications();
+        boolean ok = WorkService.Work.start(this, WorkService.Work.IMPORT, () -> {
+            try {
+                GameFolderImport.run(source, root, game, WorkService.Work::isCancelled, Native::checkGame);
+                return null;
+            } catch (IOException e) {
+                return e.getMessage();
+            }
+        });
+        if (ok) showWorkScreen(WorkService.Work.IMPORT);
+    }
+
     // ------------------------------------------------------------------ game from a disc image
     // The user picks a folder holding their .wux/.wud image, its disc key (same name, .key) and
     // the console's common key (common.key), or a Cemu .wua archive (decrypted: no keys; used
@@ -1073,14 +1125,15 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     // The work runs in WorkService.Work (with a notification, so it continues in the background);
     // this screen shows its progress, also when the app is opened again while it runs.
     private void showWorkScreen(int kind) {
-        boolean extract = kind == WorkService.Work.EXTRACT;
+        boolean importing = kind == WorkService.Work.IMPORT;
+        boolean extract = kind != WorkService.Work.COMPILE;
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         int pad = (int) (24 * getResources().getDisplayMetrics().density);
         box.setPadding(pad, pad, pad, pad);
         TextView t = new TextView(this);
         t.setTextSize(16);
-        t.setText(extract ? R.string.extract_running : R.string.compile_running);
+        t.setText(importing ? R.string.import_game_running : extract ? R.string.extract_running : R.string.compile_running);
         box.addView(t);
         android.widget.ProgressBar bar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(1000);
@@ -1091,8 +1144,8 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         cancel.setText(android.R.string.cancel);
         cancel.setOnClickListener(v -> {  // a compile's parts in progress still finish (up to half a minute)
             WorkService.Work.markCancelled();
-            if (extract) Native.extractCancel();
-            else Native.compileCancel();
+            if (kind == WorkService.Work.EXTRACT) Native.extractCancel();
+            else if (kind == WorkService.Work.COMPILE) Native.compileCancel();
             cancel.setEnabled(false);
             cancel.setText(R.string.compile_stopping);
         });
@@ -1104,7 +1157,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
             @Override
             public void run() {
                 if (WorkService.Work.running() != kind || sea != mySea) return;  // finished, or another screen
-                long[] p = extract ? Native.extractProgress() : Native.compileProgress();
+                long[] p = WorkService.Work.progress(kind);
                 long s = WorkService.Work.elapsedSeconds();
                 if (p[1] > 0) {
                     bar.setProgress((int) (p[0] * 1000 / p[1]));
@@ -1122,7 +1175,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     /** A job of WorkService.Work finished (called on the main thread, possibly in a later activity). */
     void workFinished(int kind, String err, boolean cancelled) {
-        if (kind == WorkService.Work.EXTRACT) {
+        if (kind == WorkService.Work.IMPORT) {
+            if (err == null) checkAndStart();
+            else showSetup(getString(cancelled ? R.string.import_game_cancelled : R.string.import_game_failed, err));
+        } else if (kind == WorkService.Work.EXTRACT) {
             if (err == null) checkAndStart();  // checks the extracted executable against this build
             else showSetup(getString(R.string.extract_failed, err));
         } else if (err == null && !cancelled) {
@@ -1278,7 +1334,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
 
     // ------------------------------------------------------------------ import / export
     // the game save (files/save) and the save states (files/states) to and from a folder the user picks
-    static final int PICK_EXPORT = 2, PICK_IMPORT = 3, PICK_DISC = 4;
+    static final int PICK_EXPORT = 2, PICK_IMPORT = 3, PICK_DISC = 4, PICK_GAME_FOLDER = 8;
     private boolean exportSave = true, exportStates = true;
 
     void chooseExport() {
@@ -1399,6 +1455,10 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     @Override
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == PICK_GAME_FOLDER && result == RESULT_OK && data != null && data.getData() != null) {
+            startGameFolderImport(data.getData());
+            return;
+        }
         if (request == PICK_DRIVER && result == RESULT_OK && data != null && data.getData() != null) {
             installDriver(data.getData());
             return;
