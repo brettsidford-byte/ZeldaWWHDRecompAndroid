@@ -52,6 +52,7 @@ struct Surface {
     uint32_t tileMode = 0;     // E_HWTILEMODE
     uint32_t swizzle = 0;
     bool isDepth = false;
+    bool shadowSource = false;  // scratch depth target copied into a cascade array
     bool gpuWritten = false;   // contents produced by the GPU; never reload from guest memory
     uint64_t writeSeq = 0;     // when the GPU last wrote it (several surfaces can alias one address)
     uint64_t contentHash = 0;  // hash of guest data at last upload
@@ -148,6 +149,8 @@ void prof_pass_begin(uint32_t w, uint32_t h, const VkFormat* colors, uint32_t nC
 void prof_pass_end();
 void prof_draw(uint32_t ps);
 void prof_frame();
+void report_view_size(uint32_t width, uint32_t height);
+void prof_stats(float out[4]);  // GPU ms, submission gap ms, passes/frame, draws/frame; -1 if unavailable
 
 // ---- transient memory
 Upload upload_alloc(VkDeviceSize size, VkDeviceSize align = 256);
@@ -178,6 +181,8 @@ bool create_surface_image(Surface* s, bool forRendering);
 // resolution scale for screen-sized render targets (WWHD_RES_SCALE at startup, then the app's
 // setting); a change requested with set_resolution_scale() takes effect at the next frame
 float resolution_scale();
+float shadow_scale();
+void set_shadow_scale(float scale);
 void latch_resolution_scale();  // frame boundary (swap)
 // a render target made at another scale: reallocate it at the current one, keeping its contents
 Surface* rescaled(Surface* s);

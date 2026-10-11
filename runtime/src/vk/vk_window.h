@@ -25,7 +25,12 @@ void save_caches();
 
 // performance overlay: {game fps, game frame time avg ms, worst ms, presented fps, frame generation GPU ms}
 // over the last second (any thread)
-void perf_stats(float out[7]);
+// Slots 7..15: GPU ms, submission gap ms, passes, draws, render CPU ms,
+// frame-submitting game-thread CPU ms, GX2DrawDone wait ms, main 3D target width, height.
+void perf_stats(float out[16]);
+void report_game_cpu(float ms, float drawDoneMs);
+float shadow_scale();
+void set_shadow_scale(float scale);
 // the running GPU driver's name and version ("" before the renderer started)
 const char* driver_info();
 const char* gpu_name();

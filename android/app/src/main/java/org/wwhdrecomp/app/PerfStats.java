@@ -21,6 +21,9 @@ import java.util.List;
  */
 final class PerfStats {
     float gameFps, frameMs, frameMaxMs, shownFps, fgGpuMs;
+    float gpuMs = -1, gpuGapMs = -1, passes = -1, draws = -1;
+    float renderCpuMs = -1, gameCpuMs = -1, drawDoneMs = -1;
+    float scanWidth, scanHeight;
     float avgFps = Float.NaN;  // since the overlay was switched on
     private float frames0 = -1, sec0;
     float cpuPercent = -1, gpuPercent = -1;
@@ -62,6 +65,11 @@ final class PerfStats {
         frameMaxMs = n[2];
         shownFps = n[3];
         fgGpuMs = n[4];
+        if (n.length >= 16) {
+            gpuMs = n[7]; gpuGapMs = n[8]; passes = n[9]; draws = n[10];
+            renderCpuMs = n[11]; gameCpuMs = n[12]; drawDoneMs = n[13];
+            scanWidth = n[14]; scanHeight = n[15];
+        }
         if (frames0 < 0) {
             frames0 = n[5];
             sec0 = n[6];

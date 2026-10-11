@@ -60,7 +60,7 @@ static void image_shape(uint32_t dim, uint32_t slices, bool forRendering, VkImag
 
 // Rendering at a higher (or lower) resolution than the console: render targets with the screen's
 // 16:9 shape (the TV image and its post-processing chain, the GamePad image) are created this much
-// larger. Shadow maps and other square or array targets keep their size. Shaders still see guest
+// larger. Shadows have an independent scale; other square or array targets keep their size. Shaders still see guest
 // units: viewports and scissors are scaled, and uf_fragCoordScale / uf_texNScale undo the scale.
 // The factor can change while the game runs (app setting): it is requested from any thread and
 // latched at the frame boundary; render targets made at another factor are reallocated when they
@@ -74,12 +74,18 @@ static float g_res = [] {
     return v;
 }();
 static std::atomic<float> g_res_requested{0};
+static std::atomic<float> g_shadow_requested{1.0f};
+static float g_shadow = 1.0f;
+float shadow_scale() { return g_shadow_requested.load(std::memory_order_relaxed); }
+void set_shadow_scale(float v) { g_shadow_requested = v == 0.5f ? 0.5f : 1.0f; }
 
 float resolution_scale() { return g_res; }
 
 void set_resolution_scale(float v) { g_res_requested = clamp_scale(v); }
 
 void latch_resolution_scale() {
+    float shadow = shadow_scale();
+    if (shadow != g_shadow) { g_shadow = shadow; LOG("[gfx] shadow resolution %.1fx", shadow); }
     float v = g_res_requested.exchange(0);
     if (v <= 0 || v == g_res) return;
     g_res = v;
@@ -91,6 +97,30 @@ static bool screen_shaped(const Surface* s) {
     float aspect = (float)s->width / (float)s->height;
     return aspect > 1.70f && aspect < 1.84f;
 }
+
+// Cascade arrays, plus scratch targets observed being copied into them. Do not
+// classify all square depth images as shadows. Preserve original sizes on drivers
+// unable to copy between the unscaled scratch image and a scaled depth array.
+static bool shadow_target(const Surface* s) {
+    return s->isDepth && !s->fmt.stencil && s->mips == 1 && (s->slices > 1 || s->shadowSource);
+}
+static float target_scale(const Surface* s) {
+    if (!shadow_target(s)) return screen_shaped(s) ? resolution_scale() : 1.0f;
+    if (g_shadow == 1.0f) return 1.0f;
+    static std::unordered_map<VkFormat, bool> supported;
+    auto found = supported.find(s->fmt.format);
+    if (found == supported.end()) {
+        VkFormatProperties fp;
+        vkGetPhysicalDeviceFormatProperties(R.pd, s->fmt.format, &fp);
+        const auto need = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT;
+        found = supported.emplace(s->fmt.format, (fp.optimalTilingFeatures & need) == need).first;
+    }
+    if (found->second) return g_shadow;
+    static bool warned = false;
+    if (!warned) { LOG("[gfx] half shadows unavailable: depth format lacks blit support; using original"); warned = true; }
+    return 1.0f;
+}
+
 
 // Aspect ratio of the TV picture (aspect.cpp): the game's TV-shaped buffers (1280x720 ... and their
 // reductions, not the GamePad's 854x480 family) are created kx times wider (ky taller) on top of the
@@ -125,8 +155,8 @@ static void target_aspect(const Surface* s, float& ax, float& ay) {
 }
 
 Surface* rescaled(Surface* s) {
-    if (!s || !s->img.image || s->img.type != VK_IMAGE_TYPE_2D || s->mips > 1 || !screen_shaped(s)) return s;
-    float want = resolution_scale(), ax, ay;
+    if (!s || !s->img.image || s->img.type != VK_IMAGE_TYPE_2D || s->mips > 1 || (!screen_shaped(s) && !shadow_target(s))) return s;
+    float want = target_scale(s), ax, ay;
     target_aspect(s, ax, ay);
     if (std::fabs(s->rscale - want) < 1e-3f && s->ax == ax && s->ay == ay) return s;
     Image old = s->img;
@@ -149,8 +179,8 @@ Surface* rescaled(Surface* s) {
         prepare(old, Use::COPY_SRC);
         prepare(s->img, Use::COPY_DST);
         VkImageBlit b{};
-        b.srcSubresource = {old.aspect, 0, 0, 1};
-        b.dstSubresource = {s->img.aspect, 0, 0, 1};
+        b.srcSubresource = {old.aspect, 0, 0, old.layers};
+        b.dstSubresource = {s->img.aspect, 0, 0, s->img.layers};
         b.srcOffsets[1] = {(int32_t)old.width, (int32_t)old.height, 1};
         b.dstOffsets[1] = {(int32_t)s->img.width, (int32_t)s->img.height, 1};
         vkCmdBlitImage(command_buffer(), old.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, s->img.image,
@@ -186,11 +216,13 @@ bool create_surface_image(Surface* s, bool forRendering) {
     s->rscale = 1.0f;
     s->ax = s->ay = 1.0f;
     if (forRendering && type == VK_IMAGE_TYPE_2D && screen_shaped(s)) target_aspect(s, s->ax, s->ay);
-    if (forRendering && type == VK_IMAGE_TYPE_2D && (resolution_scale() != 1.0f || s->ax != 1.0f || s->ay != 1.0f) && screen_shaped(s)) {
-        s->rscale = resolution_scale();
+    if (forRendering && type == VK_IMAGE_TYPE_2D) {
+        s->rscale = target_scale(s);
         w = std::max<uint32_t>(1, (uint32_t)lroundf(s->width * s->rscale * s->ax));
         h = std::max<uint32_t>(1, (uint32_t)lroundf(s->height * s->rscale * s->ay));
     }
+    if (forRendering && shadow_target(s) && s->rscale != 1.0f)
+        LOG("[gfx] shadow target %08X %ux%u x%u -> %ux%u", s->addr, s->width, s->height, layers, w, h);
     // a mip chain can't be longer than the size allows
     uint32_t maxMips = 1;
     for (uint32_t d = std::max({w, h, depth}); d > 1; d >>= 1) maxMips++;
@@ -321,7 +353,7 @@ Surface* surface_from_color_buffer(uint32_t addr, uint32_t* firstSlice, uint32_t
     d.pitch = cb->surface.pitch;
     d.format = (uint32_t)cb->surface.format.value();
     d.tileMode = (uint32_t)cb->surface.tileMode.value();
-    return find_or_create_surface(d, true);
+    return rescaled(find_or_create_surface(d, true));
 }
 
 Surface* surface_from_depth_buffer(uint32_t addr, uint32_t* firstSlice, uint32_t* numSlices) {
@@ -339,7 +371,7 @@ Surface* surface_from_depth_buffer(uint32_t addr, uint32_t* firstSlice, uint32_t
     d.format = (uint32_t)db->surface.format.value();
     d.tileMode = (uint32_t)db->surface.tileMode.value();
     d.isDepth = true;
-    return find_or_create_surface(d, true);
+    return rescaled(find_or_create_surface(d, true));
 }
 
 // ---------------------------------------------------------------- sampled textures
@@ -1027,7 +1059,11 @@ void copy_surface_impl(uint32_t srcAddr, uint32_t srcMip, uint32_t srcSlice, uin
         } else {
             srcSlice = dstSlice = 0;
         }
-        Surface* dst = find_or_create_surface(dd, true);
+        Surface* dst = rescaled(find_or_create_surface(dd, true));
+        if (dst && shadow_target(dst) && src->isDepth && src->mips == 1) {
+            // Next time this scratch target is rendered it adopts the same scale.
+            src->shadowSource = true;
+        }
         if (!dst || dst->img.format != src->img.format) return;
         if (srcSlice >= src->img.layers || dstSlice >= dst->img.layers) return;
         if (dst == src) return;  // same image: only a slice-to-itself copy reaches here in practice

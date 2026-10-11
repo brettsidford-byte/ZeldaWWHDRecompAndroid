@@ -259,6 +259,14 @@ final class ControlsView extends View {
                     + (Math.abs(p.shownFps - p.gameFps) > 0.5f ? "  Shown: " + num(p.shownFps, "%.0f") : ""));
         if ((it & PERF_FRAME) != 0)
             list.add("Frame: " + unit(p.frameMs, "%.1f", " ms") + "  Max: " + unit(p.frameMaxMs, "%.1f", " ms"));
+        if ((it & PERF_CPU) != 0) {
+            list.add("CPU ms: render " + num(p.renderCpuMs, "%.1f") + "  game " + num(p.gameCpuMs, "%.1f"));
+            list.add("DrawDone wait: " + unit(p.drawDoneMs, "%.1f", " ms"));
+        }
+        if ((it & PERF_GPU) != 0) {
+            list.add("GPU: " + unit(p.gpuMs, "%.1f", " ms") + "  Queue gap: " + unit(p.gpuGapMs, "%.1f", " ms"));
+            list.add("Passes: " + num(p.passes, "%.0f") + "  Draws: " + num(p.draws, "%.0f"));
+        }
         StringBuilder load = new StringBuilder();
         if ((it & PERF_CPU) != 0) load.append("CPU: ").append(unit(p.cpuPercent, "%.0f", "%")).append("  ");
         if ((it & PERF_GPU) != 0) {
@@ -273,6 +281,7 @@ final class ControlsView extends View {
         if (temp.length() > 0) list.add("Temp: " + temp.toString().trim());
         boolean settings = (it & PERF_SETTINGS) != 0;
         if (settings && perfSettings != null) list.addAll(perfSettings.get());
+        if (settings && p.scanWidth > 0) list.add("Main buffer: " + num(p.scanWidth, "%.0f") + "×" + num(p.scanHeight, "%.0f"));
         java.util.List<String> device = new java.util.ArrayList<>();
         String chip = (it & PERF_CPU) != 0 ? PerfStats.socName() : "", gpu = (it & PERF_GPU) != 0 ? PerfStats.gpuName() : "";
         if (!chip.isEmpty() || !gpu.isEmpty())

@@ -2366,6 +2366,8 @@ void draw(const uint32_t* regs, uint32_t prim, uint32_t count, uint32_t indexTyp
     for (auto& c : colors)
         if (c && (c->img.width != w || c->img.height != h)) { c = nullptr; g_skip[SK_DROPPED_COLOR]++; }
     if (!w) { g_skip[SK_NO_TARGET]++; return; }
+    if (colors[0] && colors[0]->width == 1280 && colors[0]->height == 720 && colors[0]->slices == 1)
+        report_view_size(w, h);
 
     // skipping while compiling only for targets drawn in each of the last 3 frames (see wait_compiled)
     bool everyFrame = true;

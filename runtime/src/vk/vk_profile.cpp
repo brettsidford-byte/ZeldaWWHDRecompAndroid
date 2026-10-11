@@ -1,12 +1,13 @@
 // GPU profiling (WWHD_GPU_PROFILE=1): timestamps at the start and end of every command buffer and
 // around every render pass of the game. Read back when the GPU has finished the command buffer and
-// summed per kind of pass (size, formats); every 150 frames the log shows GPU busy time per frame
+// summed per kind of pass (size, formats); every second the log shows GPU busy time per frame
 // against the frame time, and the passes that cost the most.
 #include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,8 @@ struct Stat {
 };
 
 bool g_on = false, g_checked = false;
+std::mutex g_snapshot_mutex;
+float g_snapshot[4] = {-1, -1, -1, -1};
 double g_period = 1;  // ns per tick
 uint64_t g_mask = ~0ull;
 std::vector<VkQueryPool> g_free;
@@ -206,12 +209,22 @@ void prof_pass_end() {
     g_open = -1;
 }
 
-// once per game frame: the report every 150 frames
+// Once per game frame: publish one-second averages and log the expensive passes.
 void prof_frame() {
     if (!g_on) return;
-    if (++g_frames < 150) return;
+    ++g_frames;
+    if (std::chrono::duration<double>(std::chrono::steady_clock::now() - g_window_start).count() < 1.0) return;
     double wall = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - g_window_start).count();
     double f = (double)g_frames;
+    uint64_t passes = 0, draws = 0;
+    for (const Stat& s : g_stats) { passes += s.count; draws += s.draws; }
+    {
+        std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+        g_snapshot[0] = g_busy_ns / 1e6 / f;
+        g_snapshot[1] = g_gap_ns / 1e6 / f;
+        g_snapshot[2] = passes / f;
+        g_snapshot[3] = draws / f;
+    }
     LOG("[gpuprof] %llu frames: frame %.1f ms; GPU busy %.1f ms/frame (game passes %.1f), idle between submissions %.1f ms/frame",
         (unsigned long long)g_frames, wall / f, g_busy_ns / 1e6 / f, g_pass_ns / 1e6 / f, g_gap_ns / 1e6 / f);
     std::vector<int> order(g_stats.size());
@@ -227,6 +240,11 @@ void prof_frame() {
     g_busy_ns = g_pass_ns = g_gap_ns = 0;
     g_frames = 0;
     g_window_start = std::chrono::steady_clock::now();
+}
+
+void prof_stats(float out[4]) {
+    std::lock_guard<std::mutex> lock(g_snapshot_mutex);
+    std::copy(g_snapshot, g_snapshot + 4, out);
 }
 
 }  // namespace gfx

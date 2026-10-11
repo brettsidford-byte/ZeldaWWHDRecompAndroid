@@ -444,6 +444,7 @@ JNI_FN(void, setOption)(JNIEnv* env, jclass, jstring name, jint value) {
     else if (n == "aniso") gfx::set_aniso(value != 0);
     else if (n == "pro_controller") input::set_pro_controller(value != 0);
     else if (n == "capture") gfx::request_capture();
+    else if (n == "shadow_scale") gfx::set_shadow_scale(value / 100.0f);
     else if (n == "res_scale") gfx::set_resolution_scale(value / 100.0f);
     else if (n == "tv_aspect") gfx::set_tv_aspect(value);
     // aspect ratio the game renders at (aspect.cpp): 0 = 16:9 (original), 1 = the screen's shape
@@ -463,6 +464,7 @@ JNI_FN(void, setOption)(JNIEnv* env, jclass, jstring name, jint value) {
 
 JNI_FN(jint, getOption)(JNIEnv* env, jclass, jstring name) {
     std::string n = jstr(env, name);
+    if (n == "shadow_scale") return (int)lroundf(gfx::shadow_scale() * 100);
     if (n == "ao_mode") return gfx::ao_mode();
     if (n == "ao_hires") return gfx::ao_hires_enabled();
     if (n == "aniso") return gfx::aniso_enabled();
@@ -509,10 +511,10 @@ JNI_FN(void, applyFrameGen)(JNIEnv* env, jclass, jboolean on, jstring dll, jbool
 // performance overlay: {game fps, frame time avg ms, worst ms, presented fps, frame generation GPU ms,
 // game frames so far, their time in seconds (without pauses)}
 JNI_FN(jfloatArray, perfStats)(JNIEnv* env, jclass) {
-    float v[7];
+    float v[16];
     gfx::perf_stats(v);
-    jfloatArray a = env->NewFloatArray(7);
-    env->SetFloatArrayRegion(a, 0, 7, v);
+    jfloatArray a = env->NewFloatArray(16);
+    env->SetFloatArrayRegion(a, 0, 16, v);
     return a;
 }
 

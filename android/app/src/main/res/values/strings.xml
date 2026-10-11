@@ -301,4 +301,12 @@
         <item>Centre fix</item>
         <item>Centre + noise fix</item>
     </string-array>
+    <string name="opt_shadow_resolution">Shadow resolution</string>
+    <string name="opt_shadow_resolution_hint">Half sizes cascade maps and their detected scratch targets. Experimental; falls back to original if depth scaling is unsupported.</string>
+    <string-array name="shadow_resolutions">
+        <item>Original</item>
+        <item>Half (experimental)</item>
+    </string-array>
+    <string name="opt_gpu_profile">GPU pass timings</string>
+    <string name="opt_gpu_profile_hint">GPU timestamps and pass counters, where supported. Changing this restarts the game. Profiling adds overhead; disable for final performance comparisons.</string>
 </resources>

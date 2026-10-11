@@ -82,6 +82,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         if (!libraryLoaded) {
             // static initializers in the library read these, so they must be set before it loads
             setenv("WWHD_RES_SCALE", prefs.getString("res_scale", "1"));  // wwhd.env / intent extras below override
+            if (prefs.getBoolean("gpu_profile", true)) setenv("WWHD_GPU_PROFILE", "1");
             setenv("WWHD_LANGUAGE", gameLanguage());
             applyFrameGenSettings();
             setenv("WWHD_APP_VERSION", CrashLogs.appVersion(this));  // the crash log's name
@@ -456,6 +457,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     }
 
     private void applyOptions() {
+        Native.setOption("shadow_scale", prefs.getInt("shadow_scale", 100));
         Native.setOption("ao_mode", prefs.getInt("ao_mode", Native.getOption("ao_mode")));
         Native.setOption("ao_hires", prefs.getBoolean("ao_hires", Native.getOption("ao_hires") != 0) ? 1 : 0);
         Native.setOption("aniso", prefs.getBoolean("aniso", Native.getOption("aniso") != 0) ? 1 : 0);
@@ -679,7 +681,14 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
         }
         String[] ao = {"Wii U", "centre fix", "centre+noise"};
         int aoMode = Math.max(0, Math.min(2, Native.getOption("ao_mode")));
-        l.add("Res: " + scale + "× " + Math.round(720 * f) + "p  AO: " + ao[aoMode]);
+        int width = Math.round(1280 * f), height = Math.round(720 * f);
+        if (prefs.getInt("render_aspect", 0) == 1 && controls.getWidth() > 0 && controls.getHeight() > 0) {
+            float aspect = (float) controls.getWidth() / controls.getHeight();
+            if (aspect < 16f / 9f) height = Math.round(1280 * f / aspect);
+            else width = Math.round(720 * f * aspect);
+        }
+        l.add("View: " + width + "×" + height + "  AO: " + ao[aoMode]);
+        l.add("Shadows: " + (Native.getOption("shadow_scale") == 50 ? "half (experimental)" : "original"));
         StringBuilder fx = new StringBuilder();
         if (Native.getOption("aniso") != 0) fx.append("Aniso: 16×  ");
         if (Native.getOption("ao_hires") != 0) fx.append("AO depth: full size");
@@ -891,6 +900,18 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     static final float[] CONTROL_SIZES = {0.75f, 0.9f, 1f, 1.15f, 1.3f};
 
     // render targets switch to the new size as the game next draws into them
+    void setShadowScale(int index) {
+        int scale = index == 1 ? 50 : 100;
+        prefs.edit().putInt("shadow_scale", scale).apply();
+        Native.setOption("shadow_scale", scale);
+        controls.resetPerfAverage();
+    }
+
+    void setGpuProfile(boolean enabled) {
+        prefs.edit().putBoolean("gpu_profile", enabled).commit();
+        restartApp(false);
+    }
+
     void setResolution(int i) {
         if (RES_SCALES[i].equals(prefs.getString("res_scale", "1"))) return;
         prefs.edit().putString("res_scale", RES_SCALES[i]).commit();
@@ -924,7 +945,7 @@ public final class MainActivity extends Activity implements SurfaceHolder.Callba
     String onOff(boolean on) { return getString(on ? R.string.on : R.string.off); }
 
     // ------------------------------------------------------------------ resolution
-    static final String[] RES_SCALES = {"0.5", "0.75", "1", "1.5", "2", "3"};
+    static final String[] RES_SCALES = {"0.4", "0.5", "0.75", "1", "1.5", "2", "3"};
 
     String resolutionLabel(String scale) {
         float f;

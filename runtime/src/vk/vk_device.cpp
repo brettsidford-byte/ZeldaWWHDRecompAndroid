@@ -2351,16 +2351,36 @@ static void service_tv_dumps() {
 
 // performance overlay: game frame times over one-second windows, and running totals for the average
 static std::mutex g_perf_mu;
-static float g_perf[7];
+static float g_perf[16] = {0, 0, 0, 0, 0, 0, 0, -1, -1, -1, -1, -1, -1, -1, 0, 0};
+static std::atomic<float> g_game_cpu_ms{-1}, g_game_drawdone_ms{-1};
+static std::atomic<uint32_t> g_view_width{0}, g_view_height{0};
+void report_view_size(uint32_t width, uint32_t height) {
+    g_view_width.store(width, std::memory_order_relaxed);
+    g_view_height.store(height, std::memory_order_relaxed);
+}
+void report_game_cpu(float ms, float drawDoneMs) {
+    g_game_cpu_ms = ms;
+    g_game_drawdone_ms = drawDoneMs;
+}
 static void perf_frame() {
     using clk = std::chrono::steady_clock;
     static clk::time_point last{}, windowStart{};
     static double sumMs = 0, maxMs = 0;
     static int frames = 0, late = 0;
+    static uint64_t cpu0 = 0;
+    static double cpuSumMs = 0;
+    static int cpuFrames = 0;
     static uint64_t presents0 = 0;
     static double totalFrames = 0, totalSec = 0;
     static const bool logIt = getenv("WWHD_PERF_LOG") != nullptr;  // debug: log the numbers every second
     clk::time_point now = clk::now();
+    uint64_t cpu = platform::thread_cpu_us(pthread_self());
+    if (cpu && cpu0 && cpu >= cpu0 && last != clk::time_point{} &&
+        std::chrono::duration<double>(now - last).count() <= 1.0) {
+        cpuSumMs += (cpu - cpu0) / 1000.0;
+        cpuFrames++;
+    }
+    cpu0 = cpu;
     if (last != clk::time_point{}) {
         double ms = std::chrono::duration<double, std::milli>(now - last).count();
         sumMs += ms;
@@ -2388,6 +2408,14 @@ static void perf_frame() {
         g_perf[2] = (float)maxMs;
         g_perf[3] = (float)((p - presents0) / el);
         g_perf[4] = fg::loaded() ? fg::gpu_ms() : 0.0f;
+        prof_stats(g_perf + 7);
+        g_perf[11] = cpuFrames ? cpuSumMs / cpuFrames : -1;
+        g_perf[12] = g_game_cpu_ms.load();
+        g_perf[13] = g_game_drawdone_ms.load();
+        g_perf[14] = g_view_width.load(std::memory_order_relaxed);
+        g_perf[15] = g_view_height.load(std::memory_order_relaxed);
+        cpuSumMs = 0;
+        cpuFrames = 0;
         if (logIt) LOG("[perf] game %.1f fps, frame %.1f ms, max %.1f, late %d", g_perf[0], g_perf[1], g_perf[2], late);
         late = 0;
         presents0 = p;
@@ -2400,7 +2428,7 @@ const char* driver_info() { return R.driverInfo.c_str(); }
 const char* gpu_name() { return R.device ? R.props.deviceName : ""; }
 bool driver_fallback() { return g_driver_fallback; }
 
-void perf_stats(float out[7]) {
+void perf_stats(float out[16]) {
     std::lock_guard<std::mutex> lk(g_perf_mu);
     memcpy(out, g_perf, sizeof g_perf);
 }

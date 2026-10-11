@@ -21,6 +21,9 @@
 #include <unistd.h>
 #include <dirent.h>
 #include "mem_writes.h"
+#ifdef __ANDROID__
+#include "../vk/vk_window.h"
+#endif
 
 using namespace Latte;
 
@@ -537,16 +540,40 @@ static double thread_cpu_ms(const char* name) {
 
 // GX2DrawDone calls and the time the game spent in them, for the periodic frame report
 static std::atomic<uint64_t> g_drawdone_calls{0}, g_drawdone_us{0};
+#ifdef __ANDROID__
+static std::atomic<uint64_t> g_perf_drawdone_us{0};
+#endif
 HLE(gx2, GX2DrawDone) {
     BlockingScope b;
     auto t0 = std::chrono::steady_clock::now();
     emit_host(OP_DRAW_DONE, {});
     render_sync();
     g_drawdone_calls++;
-    g_drawdone_us += (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+    uint64_t waitUs = (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+    g_drawdone_us += waitUs;
+#ifdef __ANDROID__
+    g_perf_drawdone_us += waitUs;
+#endif
     ret(c, 1);
 }
 HLE(gx2, GX2SwapScanBuffers) {
+#ifdef __ANDROID__
+    // CPU clock of the game thread submitting frames, not aggregate process load.
+    // Thread-local state avoids mixing clocks if another guest thread swaps.
+    static thread_local uint64_t cpu0 = 0;
+    static thread_local auto window = std::chrono::steady_clock::now();
+    static thread_local uint32_t frames = 0;
+    const uint64_t cpu = platform::thread_cpu_us(pthread_self());
+    const auto now = std::chrono::steady_clock::now();
+    if (!cpu0) { cpu0 = cpu; window = now; g_perf_drawdone_us.exchange(0); }
+    else if (std::chrono::duration<double>(now - window).count() > 2.0) {
+        cpu0 = cpu; frames = 0; window = now; g_perf_drawdone_us.exchange(0);
+    } else if (++frames && std::chrono::duration<double>(now - window).count() >= 1.0) {
+        gfx::report_game_cpu(cpu >= cpu0 ? (cpu - cpu0) / 1000.0f / frames : -1,
+                             g_perf_drawdone_us.exchange(0) / 1000.0f / frames);
+        cpu0 = cpu; frames = 0; window = now;
+    }
+#endif
     // debug: WWHD_TRACE_SWAP=n logs the guest call chain of the first n swaps
     static int trace = getenv("WWHD_TRACE_SWAP") ? atoi(getenv("WWHD_TRACE_SWAP")) : 0;
     if (trace > 0) {

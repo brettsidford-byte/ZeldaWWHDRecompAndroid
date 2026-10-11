@@ -439,7 +439,7 @@ final class OptionsMenu extends Dialog {
     private void graphics() {
         String[] res = new String[MainActivity.RES_SCALES.length];
         for (int i = 0; i < res.length; i++) res[i] = a.resolutionLabel(MainActivity.RES_SCALES[i]);
-        choice(R.string.opt_resolution, 0, res, indexOf(MainActivity.RES_SCALES, a.prefs.getString("res_scale", "1"), 2), a::setResolution);
+        choice(R.string.opt_resolution, 0, res, indexOf(MainActivity.RES_SCALES, a.prefs.getString("res_scale", "1"), 3), a::setResolution);
         submenu(R.string.opt_framegen, 0, a.frameGenLabel(), () -> openPage(this::frameGenPage));
         choice(R.string.opt_render_aspect, R.string.opt_render_aspect_hint, a.getResources().getStringArray(R.array.render_aspect_modes),
                a.prefs.getInt("render_aspect", 0), i -> {
@@ -461,6 +461,11 @@ final class OptionsMenu extends Dialog {
         });
         choice(R.string.opt_ao, 0, a.getResources().getStringArray(R.array.ao_modes), Native.getOption("ao_mode"), a::setAo);
         toggle(R.string.opt_ao_hires, 0, Native.getOption("ao_hires") != 0, on -> a.setBool("ao_hires", on));
+        choice(R.string.opt_shadow_resolution, R.string.opt_shadow_resolution_hint,
+               a.getResources().getStringArray(R.array.shadow_resolutions),
+               Native.getOption("shadow_scale") == 50 ? 1 : 0, a::setShadowScale);
+        toggle(R.string.opt_gpu_profile, R.string.opt_gpu_profile_hint,
+               a.prefs.getBoolean("gpu_profile", true), a::setGpuProfile);
         toggle(R.string.opt_aniso, 0, Native.getOption("aniso") != 0, on -> a.setBool("aniso", on));
         submenu(R.string.opt_perf, R.string.opt_perf_hint, a.getString(a.prefs.getBoolean("perf_hud", false) ? R.string.opt_on : R.string.opt_off),
                 () -> openPage(this::perfPage));

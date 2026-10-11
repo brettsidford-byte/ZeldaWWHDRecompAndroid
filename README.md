@@ -1,6 +1,31 @@
 # TLoZ:TWW HD Recompiled — Android
 
-## RG405V fork (0.6.1)
+## RG405V fork (0.6.2)
+
+This diagnostic build adds **Graphics → Shadow resolution → Original / Half (experimental)**,
+optional **0.4×** rendering, and expanded CPU/GPU overlay measurements. Original shadows remain
+selected unless you change the setting. Half scales the depth cascade arrays and scratch depth
+targets detected through copies into them, independently of the main view. Dimensions, viewports,
+sampling scales and all array layers are retained consistently. If the depth format cannot be
+blitted, the renderer logs a warning and keeps original shadows. The overlay shows the requested
+shadow setting; `[gfx] shadow target` log lines confirm which targets actually changed.
+
+**Graphics → GPU pass timings** is on by default in this diagnostic build. Turning it on or off
+restarts the game; unsupported Vulkan timestamps show `–`. Enable the overlay's CPU, GPU and
+settings fields to see render-thread CPU ms, the frame-submitting game-thread CPU ms,
+`GX2DrawDone` wait ms, GPU command-buffer ms, gaps between GPU submissions, pass/draw averages,
+and the actual main 3D buffer dimensions. Detailed per-pass sizes, formats and times are logged
+as `[gpuprof]`. GPU timings and counts are asynchronous window averages, not timings for one
+specific frame. Submission gaps include normal frame pacing; CPU ms excludes blocked time and
+other game/driver worker threads. DrawDone waits include command-queue synchronisation and are
+not a direct measure of GPU execution. GPU utilisation may still be unavailable on Mali.
+
+For Outset Island comparisons, hold the same camera position and compare Original/Half shadows
+at 0.5× first, then optionally try 0.4× or Original 16:9 with bars. Allow changed targets and
+measurements to settle. Repeat the FPS comparison with GPU pass timings disabled: timestamp
+instrumentation can affect GPU overlap and performance. Half shadows still need visual and
+performance validation on the RG405V; no frame-rate improvement is guaranteed.
+
 
 This fork adds **Import extracted game folder…** to first-run setup. Select the parent folder
 containing your complete, decrypted Wii U Wind Waker HD `code`, `content` and `meta` directories.
